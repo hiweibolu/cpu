@@ -19,7 +19,7 @@ module mem_ctrl(
 	input wire [`RegLen - 1 : 0] ram_data_i,
 	input wire [1 : 0] ram_offset_i,
 	
-	output reg ram_done_o,
+	output wire ram_done_o,
 	output reg [`RegLen - 1 : 0] ram_data_o,
 	
 	input wire [`ByteLen - 1 : 0] mem_din,
@@ -32,10 +32,14 @@ module mem_ctrl(
 
 reg work;
 reg write;
+reg ram_done;
 reg [2 : 0] offset;
 reg work_for_if;
 reg [`RegLen - 1 : 0] ram_data;
 reg [`AddrLen - 1 : 0] ram_addr;
+
+reg[3:0] waiting;
+assign ram_done_o = ram_done & ~io_buffer_full;
     
 always @ (posedge clk) begin
     if (rst == `Enable) begin
@@ -51,46 +55,61 @@ always @ (posedge clk) begin
 		inst_addr_o <= `ZERO_WORD;
 		inst_done <= `Disable;
 		
-		ram_done_o <= `Disable;
+		ram_done <= `Disable;
 		ram_data_o <= `ZERO_WORD;
 		
 		mem_dout <= `ZERO_BYTE;
 		mem_a <= `ZERO_WORD;
 		mem_wr <= `Disable;
 		
+		waiting <= `Disable;
+		
     end	
     else if (rdy == `Disable) begin
     end
-    else if (io_buffer_full == `Enable) begin
-        ram_done_o <= `Disable;
+    /*else if (io_buffer_full == `Enable) begin
+        ram_done <= `Disable;
         inst_done <= `Disable;
-        mem_a <= `ZERO_WORD;
-        mem_wr <= `Disable;
-    end
+    end*/
+    /*else if (waiting > 0) begin
+        if (waiting == 1) begin
+            mem_wr <= `Enable;
+        end
+        waiting <= waiting - 1;
+    end*/
 	else begin
 		if (work == `Disable) begin
-			if (ram_done_o == `Disable && ram_write_enable == `Enable) begin
+			if (ram_done == `Disable && ram_write_enable == `Enable) begin
 				inst_done <= `Disable;
 				
 				ram_addr <= ram_addr_i;
 				ram_data <= ram_data_i;
 
 				mem_a <= ram_addr_i + ram_offset_i;
-				mem_wr <= `Enable;
+				
+                mem_wr <= `Enable;
 				
 				work_for_if <= `Disable;
 				work <= ram_offset_i != 2'b00;
 				write <= `Enable;
 				offset <= ram_offset_i;
-				ram_done_o <= ram_offset_i == 2'b00;
+				ram_done <= ram_offset_i == 2'b00;
 				
 				case (ram_offset_i)
 					2'b11: mem_dout <= ram_data_i[31 : 24];
 					2'b01: mem_dout <= ram_data_i[15 : 8];
 					2'b00: mem_dout <= ram_data_i[7 : 0];
 				endcase 
+                /*if (ram_addr_i[17:16] == 2'b11) begin
+                    waiting <= 1;
+                    mem_wr <= `Disable;
+                end
+                else
+                begin
+                    waiting <= 0;
+                end*/
 			end
-			else if (ram_done_o == `Disable && ram_read_enable == `Enable) begin
+			else if (ram_done == `Disable && ram_read_enable == `Enable) begin
 				inst_done <= `Disable;
 				
 				ram_addr <= ram_addr_i;
@@ -106,7 +125,7 @@ always @ (posedge clk) begin
 
 			end
 			else if (inst_read_enable == `Enable) begin
-				ram_done_o <= `Disable;
+				ram_done <= `Disable;
 				inst_done <= `Disable;
 				
 				ram_addr <= inst_addr_i;
@@ -121,7 +140,7 @@ always @ (posedge clk) begin
 				offset <= 3'h4;
 			end
 			else begin
-				ram_done_o <= `Disable;
+				ram_done <= `Disable;
 				inst_done <= `Disable;
 				mem_a <= `ZERO_WORD;
 				mem_wr <= `Disable;
@@ -129,7 +148,7 @@ always @ (posedge clk) begin
 		end
 		else begin
 			if (write == `Enable) begin
-				ram_done_o <= `Disable;
+				ram_done <= `Disable;
 				inst_done <= `Disable;
 				case (offset)
 					3'h3: begin
@@ -153,13 +172,17 @@ always @ (posedge clk) begin
 						
 						work <= `Disable;
 						
-						ram_done_o <= `Enable;
+						ram_done <= `Enable;
 					end
 				endcase
+                /*if (mem_a[17:16] == 2'b11) begin
+                    waiting <= `Enable;
+                    mem_wr <= `Disable;
+                end*/
 			end
 			else
 			begin
-				ram_done_o <= `Disable;
+				ram_done <= `Disable;
 				inst_done <= `Disable;
 				case (offset)
 					3'h4: begin
@@ -191,7 +214,7 @@ always @ (posedge clk) begin
 							inst_o <= {ram_data[31 : 8], mem_din};
 							inst_done <= `Enable;
 						end else begin
-							ram_done_o <= `Enable;
+							ram_done <= `Enable;
 							ram_data_o <= {ram_data[31 : 8], mem_din};
 						end
 					end

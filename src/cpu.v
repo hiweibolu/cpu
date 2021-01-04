@@ -143,7 +143,7 @@ wire [1 : 0] ram_offset;
 wire [`AddrLen - 1 : 0] ex_target;
 
 wire mem_wr_o;
-assign mem_wr = mem_wr_o & rdy_in;
+assign mem_wr = mem_wr_o & rdy_in & ~io_buffer_full;
 
 //assign rom_addr_o = pc;
 
